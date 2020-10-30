@@ -33,7 +33,7 @@ var (
 )
 
 const (
-	DefaultTransKey = "/txmsg/defaultTransKey"
+	TransKey = "/txmsgTransKey/"
 
 	MqProducerName = "transactionMsgProducer"
 )

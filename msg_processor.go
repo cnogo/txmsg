@@ -23,10 +23,12 @@ type MsgProcessor struct {
 	state atomic.Value
 	holdLock atomic.Value  // 是否持有锁
 	ectdCli *clientv3.Client
+	dbKey string
 }
 
-func NewMsgProcessor(producer rocketmq.Producer, storage *MsgStorage, cfg *Config) *MsgProcessor {
+func NewMsgProcessor(dbKey string, producer rocketmq.Producer, storage *MsgStorage, cfg *Config) *MsgProcessor {
 	processor := &MsgProcessor{
+		dbKey: dbKey,
 		Producer: producer,
 		MsgStorage: storage,
 		cfg: cfg,
@@ -168,7 +170,7 @@ func (p *MsgProcessor) keepLockTask() {
 			continue
 		}
 
-		mutex := concurrency.NewMutex(session, DefaultTransKey)
+		mutex := concurrency.NewMutex(session, TransKey + p.dbKey)
 
 		err = mutex.Lock(context.Background())
 		if err == nil {

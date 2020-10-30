@@ -16,11 +16,12 @@ type TxMsgClient struct {
 	MsgStorage *MsgStorage
 	MsgProcessor *MsgProcessor
 	state atomic.Value
+	dbKey string
 	db *sqlx.DB
 }
 
 
-func NewTxMsgClient(db *sqlx.DB, topicLists []string, cfg *Config) (*TxMsgClient, error) {
+func NewTxMsgClient(db *sqlx.DB, dbKey string, topicLists []string, cfg *Config) (*TxMsgClient, error) {
 	msgStorage := NewMsgStorage(db, topicLists)
 	mqProducer, err := rocketmq.NewProducer(producer.WithNameServer(cfg.RocketMQAddrs), producer.WithRetry(3),
 		producer.WithGroupName(MqProducerName), producer.WithSendMsgTimeout(SendMsgTimeOut * time.Millisecond))
@@ -29,7 +30,7 @@ func NewTxMsgClient(db *sqlx.DB, topicLists []string, cfg *Config) (*TxMsgClient
 		return nil, err
 	}
 
-	msgProcessor := NewMsgProcessor(mqProducer, msgStorage, cfg)
+	msgProcessor := NewMsgProcessor(dbKey, mqProducer, msgStorage, cfg)
 
 	cli := &TxMsgClient{
 		config: cfg,
@@ -37,6 +38,7 @@ func NewTxMsgClient(db *sqlx.DB, topicLists []string, cfg *Config) (*TxMsgClient
 		MsgStorage: msgStorage,
 		MsgProcessor: msgProcessor,
 		db: db,
+		dbKey: dbKey,
 	}
 
 	cli.state.Store(SVC_CREATE)

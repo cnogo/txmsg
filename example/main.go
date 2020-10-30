@@ -43,7 +43,7 @@ func main() {
 	}
 
 
-	txmsgCli, err := txmsg.NewTxMsgClient(db, []string{"hellotopic"}, cfg)
+	txmsgCli, err := txmsg.NewTxMsgClient(db, "test", []string{"hellotopic"}, cfg)
 	if err != nil {
 		log.Println(err)
 		return
