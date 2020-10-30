@@ -123,41 +123,35 @@ func (p *MsgProcessor) scanMsgTask() {
 			continue
 		}
 
-		p.MsgStorage.TMDataSourceMap.Range(func(key, dbVal interface{}) bool {
-			// 没有持有锁
-			if !p.holdLock.Load().(bool) {
-				return false
+		if !p.holdLock.Load().(bool) {
+			continue
+		}
+
+		num := LimitNum
+		cnt := 0
+
+		for num == LimitNum && cnt < MaxDealNumOneTime {
+			msgInfoList, err := p.MsgStorage.GetWaitingMsg(LimitNum)
+			if err != nil {
+				break
 			}
 
-			db := dbVal.(*SqlxDBWrap)
-
-			num := LimitNum
-			cnt := 0
-
-			for num == LimitNum && cnt < MaxDealNumOneTime {
-				msgInfoList, err := p.MsgStorage.GetWaitingMsg(db, LimitNum)
-				if err != nil {
-					break
-				}
-
-				num = len(msgInfoList)
-				cnt += num
+			num = len(msgInfoList)
+			cnt += num
 
 
-				for i := 0; i < len(msgInfoList); i++ {
-					mqMsg := p.buildMQMessage(msgInfoList[i])
-					result, err := p.Producer.SendSync(context.Background(), mqMsg)
-					if err == nil && result.Status == primitive.SendOK {
-						err = p.MsgStorage.UpdateMsgStatus(db, msgInfoList[i].Id)
-						if err != nil {
-							log.Println(err)
-						}
+			for i := 0; i < len(msgInfoList); i++ {
+				mqMsg := p.buildMQMessage(msgInfoList[i])
+				result, err := p.Producer.SendSync(context.Background(), mqMsg)
+				if err == nil && result.Status == primitive.SendOK {
+					err = p.MsgStorage.UpdateMsgStatus(msgInfoList[i].Id)
+					if err != nil {
+						log.Println(err)
 					}
 				}
 			}
+		}
 
-			return true
-		})
 	}
 }
 
@@ -199,26 +193,16 @@ func (p *MsgProcessor) cleanMsgTask() {
 	for p.state.Load().(int) == SVC_RUNNING {
 		time.Sleep(DeleteTimePeriod * time.Second)
 
-		p.MsgStorage.TMDataSourceMap.Range(func(key, dbVal interface{}) bool {
-
-			if !p.holdLock.Load().(bool) {
-				return false
+		cnt := int64(0)
+		num := int64(DeleteMsgOneTimeNum)
+		for num == DeleteMsgOneTimeNum && cnt < MaxDealNumOneTime {
+			var err error
+			num, err = p.MsgStorage.DeleteSendedMsg(DeleteMsgOneTimeNum)
+			if err != nil {
+				continue
 			}
-
-			db := dbVal.(*SqlxDBWrap)
-			cnt := int64(0)
-			num := int64(DeleteMsgOneTimeNum)
-			for num == DeleteMsgOneTimeNum && cnt < MaxDealNumOneTime {
-				var err error
-				num, err = p.MsgStorage.DeleteSendedMsg(db, DeleteMsgOneTimeNum)
-				if err != nil {
-					continue
-				}
-				cnt += num
-			}
-
-			return true
-		})
+			cnt += num
+		}
 	}
 }
 

@@ -3,6 +3,7 @@ package txmsg
 import (
 	"github.com/apache/rocketmq-client-go/v2"
 	"github.com/apache/rocketmq-client-go/v2/producer"
+	"github.com/jmoiron/sqlx"
 	"github.com/pkg/errors"
 	"log"
 	"sync/atomic"
@@ -15,12 +16,12 @@ type TxMsgClient struct {
 	MsgStorage *MsgStorage
 	MsgProcessor *MsgProcessor
 	state atomic.Value
-	dataSources []*TxMsgDataSource
+	db *sqlx.DB
 }
 
 
-func NewTxMsgClient(dataSources []*TxMsgDataSource, topicLists []string, cfg *Config) (*TxMsgClient, error) {
-	msgStorage := NewMsgStorage(dataSources, topicLists)
+func NewTxMsgClient(db *sqlx.DB, topicLists []string, cfg *Config) (*TxMsgClient, error) {
+	msgStorage := NewMsgStorage(db, topicLists)
 	mqProducer, err := rocketmq.NewProducer(producer.WithNameServer(cfg.RocketMQAddrs), producer.WithRetry(3),
 		producer.WithGroupName(MqProducerName), producer.WithSendMsgTimeout(SendMsgTimeOut * time.Millisecond))
 
@@ -35,7 +36,7 @@ func NewTxMsgClient(dataSources []*TxMsgDataSource, topicLists []string, cfg *Co
 		Producer: mqProducer,
 		MsgStorage: msgStorage,
 		MsgProcessor: msgProcessor,
-		dataSources: dataSources,
+		db: db,
 	}
 
 	cli.state.Store(SVC_CREATE)
@@ -82,7 +83,7 @@ func (p *TxMsgClient) Close() error {
 	return nil
 }
 
-func (p *TxMsgClient) SendMsg(db *SqlxDBWrap, content, topic, tag string, delay int64) (int64, error) {
+func (p *TxMsgClient) SendMsg(content, topic, tag string, delay int64) (int64, error) {
 	if p.state.Load().(int) != SVC_RUNNING {
 		return 0, errors.New("service is not running")
 	}
@@ -99,13 +100,13 @@ func (p *TxMsgClient) SendMsg(db *SqlxDBWrap, content, topic, tag string, delay 
 		return 0, errors.New("delay is less than min delay or greater than max delay")
 	}
 
-	id, err := p.MsgStorage.InsertMsg(db, content, topic, tag, delay)
+	id, err := p.MsgStorage.InsertMsg( content, topic, tag, delay)
 	if err != nil {
 		log.Println(err)
 		return 0, err
 	}
 
-	msg := NewMsg(id, db.Url)
+	msg := NewMsg(id)
 
 	p.MsgProcessor.PutMsg(msg)
 

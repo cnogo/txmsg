@@ -21,31 +21,14 @@ func main() {
 		DeliveryWorkNum: 10,
 	}
 
-	dataCfg := &txmsg.TxMsgDataSource{
-		Host: "118.24.181.218",
-		Username: "root",
-		Password: "Kz852AdmiNj",
-		Port: 10001,
-		DBName: "payment",
-	}
 
-	txmsgCli, err := txmsg.NewTxMsgClient([]*txmsg.TxMsgDataSource{dataCfg}, []string{"hellotopic"}, cfg)
-	if err != nil {
-		log.Println(err)
-		return
-	}
-
-	err = txmsgCli.Init()
-
-	if err != nil {
-		log.Println(err)
-		return
-	}
-
-
-	dbSrc := fmt.Sprintf("%s:%s@(%s:%d)/%s?parseTime=true&loc=Local", dataCfg.Username,
-		dataCfg.Password, dataCfg.Host, dataCfg.Port, dataCfg.DBName)
-	db, err := sqlx.Connect("mysql", dbSrc)
+	dbUrl := fmt.Sprintf("%s:%s@(%s:%d)/%s?parseTime=true&loc=Local",
+		"root",
+		"123456",
+		"127.0.0.1",
+		10001,
+		"test")
+	db, err := sqlx.Connect("mysql", dbUrl)
 
 
 	if err != nil {
@@ -59,10 +42,22 @@ func main() {
 		return
 	}
 
-	dbWrap := txmsg.NewSqlxDBWrap(db, dataCfg.DBName, dataCfg.Host, dataCfg.Port)
+
+	txmsgCli, err := txmsg.NewTxMsgClient(db, []string{"hellotopic"}, cfg)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	err = txmsgCli.Init()
+
+	if err != nil {
+		log.Println(err)
+		return
+	}
 
 
-	tx, err := dbWrap.Begin()
+	tx, err := db.Begin()
 	if err != nil {
 		log.Println(err)
 		return
@@ -75,7 +70,7 @@ func main() {
 		return
 	}
 
-	cnt, err := txmsgCli.SendMsg(dbWrap, "hello cotent" + time.Now().String(), "hellotopic", "hellotag", 0)
+	cnt, err := txmsgCli.SendMsg( "hello cotent" + time.Now().String(), "hellotopic", "hellotag", 0)
 	if err != nil {
 		log.Println(err)
 		tx.Rollback()
