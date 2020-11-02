@@ -10,6 +10,7 @@ import (
 	"github.com/coreos/etcd/clientv3/concurrency"
 	"github.com/pkg/errors"
 	"log"
+	"runtime"
 	"sync/atomic"
 	"time"
 )
@@ -118,6 +119,16 @@ func (p *MsgProcessor) buildMQMessage(msgInfo *MsgInfo) *primitive.Message {
 
 // 补漏协程：扫描最近10分钟未提交事务消息，防止各种场景的消息丢失
 func (p *MsgProcessor) scanMsgTask() {
+
+	defer func() {
+		if r := recover(); r != nil {
+			const size = 64 << 10
+			buf := make([]byte, size)
+			buf = buf[:runtime.Stack(buf, false)]
+			log.Println(string(buf))
+		}
+	}()
+
 	for {
 		time.Sleep(ScheduleScanTimePeriod * time.Second)
 
@@ -158,6 +169,14 @@ func (p *MsgProcessor) scanMsgTask() {
 }
 
 func (p *MsgProcessor) keepLockTask() {
+	defer func() {
+		if r := recover(); r != nil {
+			const size = 64 << 10
+			buf := make([]byte, size)
+			buf = buf[:runtime.Stack(buf, false)]
+			log.Println(string(buf))
+		}
+	}()
 
 	// 延迟10s竞争锁
 	time.Sleep(10*time.Second)
@@ -192,6 +211,15 @@ func (p *MsgProcessor) keepLockTask() {
 
 // 删除3天前的数据
 func (p *MsgProcessor) cleanMsgTask() {
+	defer func() {
+		if r := recover(); r != nil {
+			const size = 64 << 10
+			buf := make([]byte, size)
+			buf = buf[:runtime.Stack(buf, false)]
+			log.Println(string(buf))
+		}
+	}()
+
 	for p.state.Load().(int) == SVC_RUNNING {
 		time.Sleep(DeleteTimePeriod * time.Second)
 
@@ -211,6 +239,15 @@ func (p *MsgProcessor) cleanMsgTask() {
 
 // 异步投递任务
 func (p *MsgProcessor) deliveryTask() {
+	defer func() {
+		if r := recover(); r != nil {
+			const size = 64 << 10
+			buf := make([]byte, size)
+			buf = buf[:runtime.Stack(buf, false)]
+			log.Println(string(buf))
+		}
+	}()
+
 	for p.state.Load().(int) == SVC_RUNNING {
 		msg := p.MsgQueue.Pop()
 		if msg == nil {
