@@ -138,11 +138,13 @@ func (p *MsgStorage) GetWaitingMsg(pageSize int) (result []*MsgInfo, err error) 
 
 	waitMsgSql := SelectWaitingMsgSQL
 
-	isWithTopic := false
+
 	var params []interface{}
+	params = append(params, MSG_STATUS_WAITING)
+	params = append(params, GetMilliSecondBeforeNow(10*time.Minute))
+
 	if len(p.TopicLists) != 0 {
 
-		params := append(params, MSG_STATUS_WAITING)
 		buffer := bytes.NewBufferString(SelectWaitingMsgWithTopicsSQL)
 		buffer.WriteString("(")
 
@@ -159,17 +161,12 @@ func (p *MsgStorage) GetWaitingMsg(pageSize int) (result []*MsgInfo, err error) 
 
 		buffer.WriteString(" ) order by id limit ? ")
 		waitMsgSql = buffer.String()
-		isWithTopic = true
 		params = append(params, pageSize)
 	}
 
-	var row *sqlx.Row
+	params = append(params, pageSize)
 
-	if !isWithTopic {
-		row = p.db.QueryRowx(waitMsgSql, MSG_STATUS_WAITING)
-	} else {
-		row = p.db.QueryRowx(waitMsgSql,  params...)
-	}
+	var row = p.db.QueryRowx(waitMsgSql, params...)
 
 	err = row.Scan(result)
 	if err == sql.ErrNoRows {
