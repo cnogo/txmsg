@@ -168,6 +168,8 @@ func (p *MsgProcessor) scanMsgTask() {
 
 			for i := 0; i < len(msgInfoList); i++ {
 				mqMsg := p.buildMQMessage(msgInfoList[i])
+
+				// 考虑批量发送
 				result, err := p.Producer.SendSync(context.Background(), mqMsg)
 				if err == nil && result.Status == primitive.SendOK {
 					err = p.MsgStorage.UpdateMsgStatus(msgInfoList[i].Id)
