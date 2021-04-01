@@ -30,7 +30,11 @@ func NewTxMsgClient(db *sqlx.DB, dbKey string, topicLists []string, cfg *Config)
 		return nil, err
 	}
 
-	msgProcessor := NewMsgProcessor(dbKey, mqProducer, msgStorage, cfg)
+	msgProcessor, err := NewMsgProcessor(dbKey, mqProducer, msgStorage, cfg)
+
+	if err != nil {
+		return nil, err
+	}
 
 	cli := &TxMsgClient{
 		config: cfg,

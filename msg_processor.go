@@ -19,7 +19,8 @@ type MsgProcessor struct {
 	Producer rocketmq.Producer // 生产者
 	MsgStorage *MsgStorage  // 事务消息数据访层
 	MsgQueue *MsgPriorityQueue // 事务操作消息队列
-	TimeWheel *MsgPriorityQueue // 时间轮投递
+	//TimeWheel *MsgPriorityQueue // 时间轮投递
+	TimeWheel *TimingWheel
 	cfg *Config
 	state atomic.Value
 	holdLock atomic.Value  // 是否持有锁
@@ -27,7 +28,7 @@ type MsgProcessor struct {
 	dbKey string
 }
 
-func NewMsgProcessor(dbKey string, producer rocketmq.Producer, storage *MsgStorage, cfg *Config) *MsgProcessor {
+func NewMsgProcessor(dbKey string, producer rocketmq.Producer, storage *MsgStorage, cfg *Config) (*MsgProcessor, error) {
 	processor := &MsgProcessor{
 		dbKey: dbKey,
 		Producer: producer,
@@ -47,18 +48,25 @@ func NewMsgProcessor(dbKey string, producer rocketmq.Producer, storage *MsgStora
 		return false
 	})
 
-	processor.TimeWheel = NewMsgPriorityQueue(func(msg1, msg2 *Msg) bool {
-		diff := msg1.NextExpireTime - msg2.NextExpireTime
-		if diff > 0 {
-			return true
-		}
+	var err error
+	processor.TimeWheel, err = NewTimingWheel(1, 60, processor.timeWheelHandler)
 
-		return false
-	})
+	if err != nil {
+		return nil, err
+	}
+
+	//processor.TimeWheel = NewMsgPriorityQueue(func(msg1, msg2 *Msg) bool {
+	//	diff := msg1.NextExpireTime - msg2.NextExpireTime
+	//	if diff > 0 {
+	//		return true
+	//	}
+	//
+	//	return false
+	//})
 
 
 
-	return processor
+	return processor, nil
 }
 
 func (p *MsgProcessor) Init() error {
@@ -83,13 +91,17 @@ func (p *MsgProcessor) Init() error {
 	go p.cleanMsgTask()
 	go p.keepLockTask()
 	go p.deliveryTask()
-	go p.timeWheelTime()
+
+
+	p.TimeWheel.Start()
+
 
 	return nil
 }
 
 func (p *MsgProcessor) Close() {
 	p.state.Store(SVC_CLOSE)
+	p.TimeWheel.Stop()
 	p.ectdCli.Close()
 }
 
@@ -284,27 +296,34 @@ func (p *MsgProcessor) deliveryTask() {
 			_ = p.MsgStorage.UpdateSendMsg(msg)
 		} else {
 			if msg.HaveDealedTimes < MaxDealTime {
-				msg.NextExpireTime = GetMilliSecond(time.Now().Add(time.Duration(msg.HaveDealedTimes) * time.Second))
-				p.TimeWheel.Push(msg)
+				p.TimeWheel.SetTimer(msg.Id, msg, time.Duration(msg.HaveDealedTimes) * time.Second)
 			}
 		}
 
 	}
 }
 
-func (p *MsgProcessor) timeWheelTime() {
-	for p.state.Load().(int) == SVC_RUNNING {
-		msg := p.TimeWheel.Pop()
-		if msg == nil {
-			continue
-		}
-
-		curTs := GetMilliSecond(time.Now())
-
-		if msg.NextExpireTime > curTs {
-			time.Sleep(time.Duration(msg.NextExpireTime-curTs) * time.Millisecond)
-		}
-
-		p.MsgQueue.Push(msg)
+func (p *MsgProcessor) timeWheelHandler(key, msg interface{}) {
+	msgV, ok := msg.(*Msg)
+	if !ok {
+		return
 	}
+	p.MsgQueue.Push(msgV)
 }
+
+//func (p *MsgProcessor) timeWheelTime() {
+//	for p.state.Load().(int) == SVC_RUNNING {
+//		msg := p.TimeWheel.Pop()
+//		if msg == nil {
+//			continue
+//		}
+//
+//		curTs := GetMilliSecond(time.Now())
+//
+//		if msg.NextExpireTime > curTs {
+//			time.Sleep(time.Duration(msg.NextExpireTime-curTs) * time.Millisecond)
+//		}
+//
+//		p.MsgQueue.Push(msg)
+//	}
+//}
