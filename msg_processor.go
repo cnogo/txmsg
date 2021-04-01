@@ -83,6 +83,7 @@ func (p *MsgProcessor) Init() error {
 	go p.cleanMsgTask()
 	go p.keepLockTask()
 	go p.deliveryTask()
+	go p.timeWheelTime()
 
 	return nil
 }
@@ -222,6 +223,11 @@ func (p *MsgProcessor) cleanMsgTask() {
 
 	for p.state.Load().(int) == SVC_RUNNING {
 		time.Sleep(DeleteTimePeriod * time.Second)
+
+		// 未持有锁
+		if !p.holdLock.Load().(bool) {
+			continue
+		}
 
 		cnt := int64(0)
 		num := int64(DeleteMsgOneTimeNum)
